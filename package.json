@@ -1,0 +1,26 @@
+{
+  "name": "localcraw",
+  "version": "0.1.0",
+  "description": "Minimal OpenClaw implementation for local LLMs",
+  "type": "module",
+  "bin": {
+    "localcraw": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "chat": "tsx src/cli.ts chat",
+    "dev": "tsx watch src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "json5": "^2.2.3",
+    "openai": "^4.68.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
