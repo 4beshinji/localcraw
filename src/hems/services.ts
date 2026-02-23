@@ -1,6 +1,7 @@
 import { ImapFlow } from "imapflow";
 import { Octokit } from "@octokit/rest";
-import type { HemsConfig } from "./config.ts";
+import type { HemsConfig, } from "./config.ts";
+import type { HemsBrowser } from "./browser.ts";
 
 export interface ServiceStatus {
   name: string;
@@ -116,6 +117,32 @@ export async function checkGitHub(cfg: HemsConfig["github"]): Promise<ServiceSta
   }
 }
 
+// ── Browser checker ──────────────────────────────────────────────────────────
+
+export async function checkBrowser(
+  cfg: HemsConfig["browserCheckers"][number],
+  browser: HemsBrowser
+): Promise<ServiceStatus> {
+  const base: ServiceStatus = {
+    name: cfg.name,
+    available: false,
+    unread_count: 0,
+    summary: "",
+    details: "",
+    error: null,
+    last_check: new Date().toISOString(),
+  };
+  try {
+    const result = await browser.runChecker(cfg);
+    base.available = true;
+    base.unread_count = result.unread_count;
+    base.summary = result.summary;
+    return base;
+  } catch (err) {
+    return { ...base, error: String(err) };
+  }
+}
+
 // ── Service checker manager ───────────────────────────────────────────────────
 
 export class ServiceCheckerManager {
@@ -124,7 +151,8 @@ export class ServiceCheckerManager {
 
   constructor(
     private cfg: HemsConfig,
-    private onUpdate: (status: ServiceStatus, prev?: ServiceStatus) => void
+    private onUpdate: (status: ServiceStatus, prev?: ServiceStatus) => void,
+    private browser?: HemsBrowser
   ) {}
 
   start(): void {
@@ -133,6 +161,15 @@ export class ServiceCheckerManager {
     }
     if (this.cfg.github.enabled) {
       this.scheduleCheck("github", () => checkGitHub(this.cfg.github), this.cfg.github.interval);
+    }
+    if (this.browser && this.cfg.browserCheckers.length > 0) {
+      for (const checkerCfg of this.cfg.browserCheckers) {
+        this.scheduleCheck(
+          checkerCfg.name,
+          () => checkBrowser(checkerCfg, this.browser!),
+          checkerCfg.interval
+        );
+      }
     }
   }
 

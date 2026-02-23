@@ -2,6 +2,13 @@ import { z } from "zod";
 import { loadConfig as loadBaseConfig } from "../config/index.ts";
 import type { Config as BaseConfig } from "../config/index.ts";
 
+const BrowserCheckerSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  js_script: z.string(),
+  interval: z.number().int().positive().default(300),
+});
+
 export const HemsConfigSchema = z.object({
   mqtt: z.object({
     broker: z.string().default("mqtt://localhost:1883"),
@@ -11,7 +18,7 @@ export const HemsConfigSchema = z.object({
   }).default({}),
 
   metrics: z.object({
-    interval: z.number().int().positive().default(10),      // seconds
+    interval: z.number().int().positive().default(10),
     processInterval: z.number().int().positive().default(30),
     cpuHighThreshold: z.number().min(0).max(100).default(90),
     memHighThreshold: z.number().min(0).max(100).default(90),
@@ -23,7 +30,7 @@ export const HemsConfigSchema = z.object({
     enabled: z.boolean().default(false),
     email: z.string().default(""),
     appPassword: z.string().default(""),
-    interval: z.number().int().positive().default(300),     // seconds
+    interval: z.number().int().positive().default(300),
   }).default({}),
 
   github: z.object({
@@ -32,6 +39,8 @@ export const HemsConfigSchema = z.object({
     interval: z.number().int().positive().default(300),
   }).default({}),
 
+  browserCheckers: z.array(BrowserCheckerSchema).default([]),
+
   homeAssistant: z.object({
     enabled: z.boolean().default(false),
     url: z.string().default("http://homeassistant.local:8123"),
@@ -39,8 +48,6 @@ export const HemsConfigSchema = z.object({
   }).default({}),
 
   server: z.object({
-    // Internal listen port. In Docker, map this to the host port via docker-compose.
-    // Defaults to 8000 to match the existing openclaw-bridge container port.
     port: z.number().int().positive().default(8000),
     host: z.string().default("0.0.0.0"),
   }).default({}),
@@ -49,10 +56,22 @@ export const HemsConfigSchema = z.object({
 export type HemsConfig = z.infer<typeof HemsConfigSchema>;
 export type FullConfig = BaseConfig & { hems: HemsConfig };
 
+function parseBrowserCheckers(): z.infer<typeof BrowserCheckerSchema>[] {
+  const raw = process.env.HEMS_BROWSER_CHECKERS;
+  if (!raw || raw.trim() === "[]" || raw.trim() === "") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return z.array(BrowserCheckerSchema).parse(parsed);
+  } catch (err) {
+    console.warn("[config] Failed to parse HEMS_BROWSER_CHECKERS:", err);
+    return [];
+  }
+}
+
 export function loadHemsConfig(): FullConfig {
   const base = loadBaseConfig();
 
-  // Load HEMS-specific config from env vars (for Docker compatibility)
   const hemsRaw = {
     mqtt: {
       broker: process.env.MQTT_BROKER
@@ -84,13 +103,13 @@ export function loadHemsConfig(): FullConfig {
         ? parseInt(process.env.HEMS_GITHUB_INTERVAL, 10)
         : undefined,
     },
+    browserCheckers: parseBrowserCheckers(),
     homeAssistant: {
       enabled: !!process.env.HEMS_HA_URL,
       url: process.env.HEMS_HA_URL,
       token: process.env.HEMS_HA_TOKEN,
     },
     server: {
-      // PORT env var controls the internal container listen port
       port: process.env.PORT
         ? parseInt(process.env.PORT, 10)
         : undefined,

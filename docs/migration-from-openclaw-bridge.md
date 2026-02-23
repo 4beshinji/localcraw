@@ -33,7 +33,7 @@
 | `run_pc_command` | ✅ 互換 | 直接実行に変わるが戻り値形式は同じ |
 | `send_pc_notification` | ✅ 互換 | notify-send / osascript にフォールバック |
 | `get_service_status` | ✅ 互換 | MQTT 経由で WorldModel に反映される |
-| `control_browser` | ⚠️ **非互換** | HTTP 501 を返す。brain は `{"success": false}` として処理 |
+| `control_browser` | ✅ 互換 | Playwright (Chromium) で実装済み |
 
 ### MQTT トピック
 
@@ -49,7 +49,7 @@
 | `hems/pc/events/*` | ✅ | 閾値イベントは同じトピックに発行 |
 | `hems/services/{name}/status` | ✅ | Gmail・GitHub のみ |
 | `hems/services/{name}/event` | ✅ | 未読数増加時のみ発行 |
-| `hems/services/{browser_checker}/status` | ❌ | ブラウザチェッカー未実装のため publish なし |
+| `hems/services/{browser_checker}/status` | ✅ | `HEMS_BROWSER_CHECKERS` で設定した分が Playwright 経由で publish される |
 
 ### REST API エンドポイント
 
@@ -61,10 +61,10 @@
 | `POST /api/pc/command` | ✅ | 完全互換 |
 | `POST /api/pc/notify` | ✅ | 互換 (`priority` フィールドは無視される) |
 | `GET /api/services/status` | ✅ | 完全互換 |
-| `POST /api/pc/browser/navigate` | ❌ | 501 Not Implemented |
-| `POST /api/pc/browser/eval` | ❌ | 501 Not Implemented |
-| `POST /api/pc/browser/get_url` | ❌ | 501 Not Implemented |
-| `POST /api/pc/browser/get_title` | ❌ | 501 Not Implemented |
+| `POST /api/pc/browser/navigate` | ✅ | Playwright (Chromium) で実装済み |
+| `POST /api/pc/browser/eval` | ✅ | Playwright (Chromium) で実装済み |
+| `POST /api/pc/browser/get_url` | ✅ | Playwright (Chromium) で実装済み |
+| `POST /api/pc/browser/get_title` | ✅ | Playwright (Chromium) で実装済み |
 | `POST /api/pc/process/kill` | ✅ | 互換 (SIGTERM を送信) |
 
 ---
@@ -98,10 +98,10 @@ HEMS_PORT_OPENCLAW_BRIDGE=8013      # ホスト側の外部ポートマッピン
 TZ=Asia/Tokyo
 ```
 
-### 廃止される変数（設定しても無視される）
+### 変更なしで使える変数（追加）
 
 ```bash
-HEMS_BROWSER_CHECKERS=[]            # ブラウザチェッカー未実装
+HEMS_BROWSER_CHECKERS=[]            # ブラウザチェッカー — 変更不要、Playwright で動作
 ```
 
 ### 新規追加される変数
@@ -289,21 +289,15 @@ docker compose restart brain
 
 ## 既知の制限と対処法
 
-### ブラウザ制御 (`control_browser`) が使えない
+### ブラウザ制御はブラウザ起動時のみ有効
 
-**影響**: brain が `control_browser` ツールを呼んだ場合、`{"success": false, "error": "501..."}` が返る。
-**深刻度**: 低。brain は失敗として扱い、代替行動を取る。
-**対処**: ブラウザ制御が重要な場合は openclaw-bridge を継続使用するか、localcraw-hems にブラウザ制御を追加実装する。
+`HEMS_BROWSER_CHECKERS` が設定されている場合に自動的に Chromium が起動し、`control_browser` が有効になります。
+設定がない場合は 503 を返します。最低 1 件のブラウザチェッカーを設定するか、起動引数で `HEMS_BROWSER_ENABLED=true` を追加してください（今後対応予定）。
 
-### ブラウザチェッカーが動かない
+### CPU 周波数情報の精度
 
-**影響**: `HEMS_BROWSER_CHECKERS` で設定したサービスの状態が MQTT に届かない。
-**対処**: 対象サービスの API (REST/GraphQL) が使える場合は、カスタムチェッカーとして `src/hems/services.ts` に追加できる。
-
-### CPU 周波数情報が 0 になる
-
-**影響**: brain の WorldModel で `cpu.freq_mhz = 0` になる。
-**深刻度**: なし。brain のどの判断ロジックも `freq_mhz` を参照していない。
+コンテナ環境では `freq_mhz` がホストと異なる場合があります。
+**深刻度**: なし。brain のどの判断ロジックも `freq_mhz` を参照していません。
 
 ### デスクトップ通知が届かない場合
 

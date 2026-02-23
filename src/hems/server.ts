@@ -9,6 +9,7 @@ import { promisify } from "util";
 import type { HemsConfig } from "./config.ts";
 import type { PcSnapshot } from "./metrics.ts";
 import type { ServiceStatus } from "./services.ts";
+import type { HemsBrowser } from "./browser.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -50,11 +51,16 @@ export class HemsApiServer {
   private startTime = Date.now();
   private latestSnapshot: PcSnapshot | null = null;
   private serviceStatuses: Map<string, ServiceStatus> = new Map();
+  private browser: HemsBrowser | null = null;
 
   constructor(private cfg: HemsConfig) {
     this.server = createServer((req, res) => {
       void this.handleRequest(req, res);
     });
+  }
+
+  setBrowser(browser: HemsBrowser): void {
+    this.browser = browser;
   }
 
   updateSnapshot(snapshot: PcSnapshot): void {
@@ -197,12 +203,52 @@ export class HemsApiServer {
         return;
       }
 
-      // Browser endpoints — placeholder (no headless browser in this variant)
+      // Browser endpoints — Playwright (Chromium)
       if (url.startsWith("/api/pc/browser/") && method === "POST") {
-        json(res, 501, {
-          success: false,
-          error: "Browser control not available in localcraw-hems",
-        });
+        if (!this.browser) {
+          json(res, 503, { success: false, error: "Browser not initialized (HEMS_BROWSER_CHECKERS not configured or Chromium unavailable)" });
+          return;
+        }
+        const body = await readBody(req);
+        let parsed: Record<string, string> = {};
+        try {
+          if (body) parsed = JSON.parse(body);
+        } catch {
+          json(res, 400, { success: false, error: "Invalid JSON" });
+          return;
+        }
+
+        const action = url.replace("/api/pc/browser/", "");
+        try {
+          switch (action) {
+            case "navigate": {
+              if (!parsed.url) { json(res, 400, { success: false, error: "url required" }); return; }
+              await this.browser.navigate(parsed.url);
+              json(res, 200, { success: true, result: `Navigated to ${parsed.url}` });
+              break;
+            }
+            case "eval": {
+              if (!parsed.javascript) { json(res, 400, { success: false, error: "javascript required" }); return; }
+              const result = await this.browser.eval(parsed.javascript);
+              json(res, 200, { success: true, result: JSON.stringify(result) });
+              break;
+            }
+            case "get_url": {
+              const currentUrl = await this.browser.getUrl();
+              json(res, 200, { success: true, result: currentUrl });
+              break;
+            }
+            case "get_title": {
+              const title = await this.browser.getTitle();
+              json(res, 200, { success: true, result: title });
+              break;
+            }
+            default:
+              json(res, 404, { success: false, error: `Unknown browser action: ${action}` });
+          }
+        } catch (err) {
+          json(res, 200, { success: false, error: String(err) });
+        }
         return;
       }
 

@@ -4,6 +4,8 @@ export interface CpuMetrics {
   usage_percent: number;
   core_count: number;
   load_1m: number;
+  freq_mhz: number;
+  temp_c: number;
 }
 
 export interface MemoryMetrics {
@@ -49,14 +51,18 @@ export interface PcSnapshot {
 }
 
 export async function getCpuMetrics(): Promise<CpuMetrics> {
-  const [load, cpuInfo] = await Promise.all([
+  const [load, cpuInfo, cpuSpeed, cpuTemp] = await Promise.all([
     si.currentLoad(),
     si.cpu(),
+    si.cpuCurrentSpeed(),
+    si.cpuTemperature(),
   ]);
   return {
     usage_percent: Math.round(load.currentLoad),
     core_count: cpuInfo.cores,
     load_1m: load.avgLoad ?? 0,
+    freq_mhz: Math.round((cpuSpeed.avg ?? 0) * 1000), // GHz → MHz
+    temp_c: cpuTemp.main ?? 0,
   };
 }
 

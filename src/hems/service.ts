@@ -6,12 +6,14 @@ import { getPcSnapshot } from "./metrics.ts";
 import { ServiceCheckerManager } from "./services.ts";
 import { HemsMqttPublisher } from "./mqtt.ts";
 import { HemsApiServer } from "./server.ts";
-import type { FullConfig, HemsConfig } from "./config.ts";
+import { HemsBrowser } from "./browser.ts";
+import type { FullConfig } from "./config.ts";
 
 export class HemsService {
   private publisher: HemsMqttPublisher;
   private checker: ServiceCheckerManager;
   private apiServer: HemsApiServer;
+  private browser: HemsBrowser | null = null;
   private metricsTimer: NodeJS.Timeout | null = null;
   private processTimer: NodeJS.Timeout | null = null;
   private startTime = Date.now();
@@ -22,26 +24,38 @@ export class HemsService {
 
     this.publisher = new HemsMqttPublisher(hems);
 
-    this.checker = new ServiceCheckerManager(hems, (status, prev) => {
-      this.publisher.publishServiceStatus(status);
-      this.apiServer.updateServiceStatus(status);
+    // Initialize browser if browser checkers are configured
+    if (hems.browserCheckers.length > 0) {
+      this.browser = new HemsBrowser();
+      console.log(`[hems] Browser checkers configured: ${hems.browserCheckers.map((c) => c.name).join(", ")}`);
+    }
 
-      // Publish event if unread count increased
-      if (
-        status.available &&
-        prev?.available &&
-        status.unread_count > (prev?.unread_count ?? 0)
-      ) {
-        this.publisher.publishServiceEvent(
-          status.name,
-          prev.unread_count,
-          status.unread_count,
-          status.summary
-        );
-      }
-    });
+    this.checker = new ServiceCheckerManager(
+      hems,
+      (status, prev) => {
+        this.publisher.publishServiceStatus(status);
+        this.apiServer.updateServiceStatus(status);
+
+        if (
+          status.available &&
+          prev?.available &&
+          status.unread_count > (prev?.unread_count ?? 0)
+        ) {
+          this.publisher.publishServiceEvent(
+            status.name,
+            prev.unread_count,
+            status.unread_count,
+            status.summary
+          );
+        }
+      },
+      this.browser ?? undefined
+    );
 
     this.apiServer = new HemsApiServer(hems);
+    if (this.browser) {
+      this.apiServer.setBrowser(this.browser);
+    }
   }
 
   async start(): Promise<void> {
@@ -52,6 +66,18 @@ export class HemsService {
       await this.publisher.connect();
     } catch (err) {
       console.warn(`[hems] MQTT connection failed: ${err}. Continuing without MQTT.`);
+    }
+
+    // Launch browser if needed
+    if (this.browser) {
+      try {
+        await this.browser.launch();
+        console.log("[hems] Browser ready");
+      } catch (err) {
+        console.warn(`[hems] Browser launch failed: ${err}. Browser features disabled.`);
+        this.browser = null;
+        this.apiServer.setBrowser(null as unknown as HemsBrowser);
+      }
     }
 
     // Start HTTP API server
@@ -83,7 +109,6 @@ export class HemsService {
       const uptime = Math.floor((Date.now() - this.startTime) / 1000);
       this.publisher.publishBridgeStatus(uptime);
 
-      // Threshold checks
       const { cpuHighThreshold, memHighThreshold, gpuTempHighThreshold, diskHighThreshold } =
         this.config.hems.metrics;
 
@@ -124,6 +149,7 @@ export class HemsService {
     if (this.processTimer) clearInterval(this.processTimer);
     this.checker.stop();
     this.publisher.disconnect();
+    if (this.browser) await this.browser.close();
     await this.apiServer.close();
     console.log("[hems] Stopped");
   }

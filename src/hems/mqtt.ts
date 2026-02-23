@@ -53,6 +53,8 @@ export class HemsMqttPublisher {
       usage_percent: snapshot.cpu.usage_percent,
       core_count: snapshot.cpu.core_count,
       load_1m: snapshot.cpu.load_1m,
+      freq_mhz: snapshot.cpu.freq_mhz,
+      temp_c: snapshot.cpu.temp_c,
     });
     this.publish("pc/metrics/memory", {
       used_gb: snapshot.memory.used_gb,
