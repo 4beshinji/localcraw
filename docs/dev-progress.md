@@ -5,8 +5,8 @@
 ## 現在の状態
 
 **ブランチ**: `hems`
-**Docker イメージ**: `localcraw-hems:dev` (ビルド済み、104.8秒)
-**次のアクション**: Claude Code を `newgrp docker` したターミナルから再起動し、動作確認を継続
+**Docker イメージ**: `localcraw-hems:dev` (ビルド済み、動作確認済み)
+**次のアクション**: 全動作確認完了。本番投入検討フェーズへ。
 
 ---
 
@@ -56,10 +56,10 @@ f175683 feat: initial localcraw implementation
 |---|---|---|
 | `npx tsc --noEmit` | ✅ 通過 | 型エラーなし |
 | `docker build` | ✅ 成功 | 104.8秒, Playwright Chromium 込み |
-| CLI ヘルプ表示 | ⏳ 未確認 | docker グループ再起動後に実施 |
-| PC メトリクス取得 (`hems status`) | ⏳ 未確認 | `--pid=host` で実施予定 |
-| HTTP API ヘルスチェック | ⏳ 未確認 | ポート 18013 でテスト予定 |
-| MQTT 接続 | ⏳ 未確認 | HEMS スタック起動後に実施 |
+| CLI ヘルプ表示 | ✅ 確認済み | `hems` サブコマンド含む |
+| PC メトリクス取得 (`hems status`) | ✅ 確認済み | `--pid=host` で CPU/メモリ/温度/プロセス取得 |
+| HTTP API ヘルスチェック | ✅ 確認済み | `/health`, `/api/pc/status` 正常応答 |
+| MQTT 接続 | ✅ 確認済み | hems/# トピックに CPU/メモリ/ディスクを定期パブリッシュ |
 
 ---
 
