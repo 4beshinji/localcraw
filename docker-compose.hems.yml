@@ -23,13 +23,10 @@ services:
     profiles: ["localcraw"]
 
     # ── Host resource access ──────────────────────────────────────────────────
-    # pid:host + /proc /sys マウントにより systeminformation がホストの
-    # CPU/メモリ/プロセス情報を正確に取得できる。
-    # セキュリティ要件が厳しい場合は削除可 (コンテナ内の値が返される)。
+    # pid:host でホストのPID名前空間を共有。
+    # /proc はpid:host時にコンテナ内で自動的にホストのものが見えるため明示的なマウント不要。
+    # (/proc:ro マウントは AppArmor + healthcheck exec と競合するため使用しない)
     pid: "host"
-    volumes:
-      - /proc:/proc:ro
-      - /sys:/sys:ro
 
     # ── GPU (NVIDIA) ──────────────────────────────────────────────────────────
     # NVIDIA GPU メトリクスが必要な場合はコメントアウトを解除:
