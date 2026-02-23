@@ -9,10 +9,13 @@
   "scripts": {
     "start": "tsx src/cli.ts",
     "chat": "tsx src/cli.ts chat",
+    "hems:serve": "tsx src/cli.ts hems serve",
+    "hems:status": "tsx src/cli.ts hems status",
     "dev": "tsx watch src/cli.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "tsx": "^4.19.2",
     "@octokit/rest": "^22.0.1",
     "commander": "^12.1.0",
     "imapflow": "^1.2.10",
@@ -24,7 +27,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }

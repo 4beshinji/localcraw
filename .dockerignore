@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.git/
+.gitignore
+*.md
+!AGENTS.md
+.env
+.env.*
+**/*.test.ts
+**/*.spec.ts

@@ -1,0 +1,96 @@
+# localcraw-hems を HEMS スタックに組み込む compose override ファイル。
+#
+# 使い方 (hems/infra/ から):
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f ../../localcraw/docker-compose.hems.yml \
+#     --profile localcraw up -d --build
+#
+# または既存の openclaw-bridge を localcraw-hems に差し替える場合:
+#   docker compose --profile openclaw down    # 旧ブリッジ停止
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f ../../localcraw/docker-compose.hems.yml \
+#     --profile localcraw up -d --build
+
+services:
+  localcraw-bridge:
+    build:
+      context: ../../localcraw
+      dockerfile: Dockerfile
+    container_name: hems-localcraw-bridge
+    restart: always
+    profiles: ["localcraw"]
+
+    # ── Host resource access ──────────────────────────────────────────────────
+    # pid:host + /proc /sys マウントにより systeminformation がホストの
+    # CPU/メモリ/プロセス情報を正確に取得できる。
+    # セキュリティ要件が厳しい場合は削除可 (コンテナ内の値が返される)。
+    pid: "host"
+    volumes:
+      - /proc:/proc:ro
+      - /sys:/sys:ro
+
+    # ── GPU (NVIDIA) ──────────────────────────────────────────────────────────
+    # NVIDIA GPU メトリクスが必要な場合はコメントアウトを解除:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+    ports:
+      - "${HEMS_PORT_OPENCLAW_BRIDGE:-8013}:8000"
+
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # ── Server ───────────────────────────────────────────────────────────────
+      - PORT=8000
+      - TZ=${TZ:-Asia/Tokyo}
+
+      # ── MQTT ─────────────────────────────────────────────────────────────────
+      - MQTT_BROKER=mosquitto
+      - MQTT_USER=${MQTT_USER:-hems}
+      - MQTT_PASS=${MQTT_PASS:-hems_dev_mqtt}
+
+      # ── Metrics collection intervals ─────────────────────────────────────────
+      - OPENCLAW_METRICS_INTERVAL=${OPENCLAW_METRICS_INTERVAL:-10}
+      - OPENCLAW_PROCESS_INTERVAL=${OPENCLAW_PROCESS_INTERVAL:-30}
+
+      # ── Gmail (optional) ─────────────────────────────────────────────────────
+      - HEMS_GMAIL_ENABLED=${HEMS_GMAIL_ENABLED:-false}
+      - HEMS_GMAIL_EMAIL=${HEMS_GMAIL_EMAIL:-}
+      - HEMS_GMAIL_APP_PASSWORD=${HEMS_GMAIL_APP_PASSWORD:-}
+      - HEMS_GMAIL_INTERVAL=${HEMS_GMAIL_INTERVAL:-300}
+
+      # ── GitHub (optional) ────────────────────────────────────────────────────
+      - HEMS_GITHUB_ENABLED=${HEMS_GITHUB_ENABLED:-false}
+      - HEMS_GITHUB_TOKEN=${HEMS_GITHUB_TOKEN:-}
+      - HEMS_GITHUB_INTERVAL=${HEMS_GITHUB_INTERVAL:-300}
+
+      # ── Home Assistant (optional) ────────────────────────────────────────────
+      - HEMS_HA_URL=${HEMS_HA_URL:-}
+      - HEMS_HA_TOKEN=${HEMS_HA_TOKEN:-}
+
+      # ── LLM provider (for chat --hems mode) ──────────────────────────────────
+      # localcraw をエージェントとしても使う場合に設定する。
+      # bridge サービスとしてのみ使う場合は不要。
+      # - OLLAMA_BASE_URL=http://host.docker.internal:11434
+
+    networks:
+      - hems-net
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

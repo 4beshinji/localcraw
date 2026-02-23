@@ -39,7 +39,9 @@ export const HemsConfigSchema = z.object({
   }).default({}),
 
   server: z.object({
-    port: z.number().int().positive().default(8013),
+    // Internal listen port. In Docker, map this to the host port via docker-compose.
+    // Defaults to 8000 to match the existing openclaw-bridge container port.
+    port: z.number().int().positive().default(8000),
     host: z.string().default("0.0.0.0"),
   }).default({}),
 });
@@ -88,8 +90,9 @@ export function loadHemsConfig(): FullConfig {
       token: process.env.HEMS_HA_TOKEN,
     },
     server: {
-      port: process.env.HEMS_PORT_OPENCLAW_BRIDGE
-        ? parseInt(process.env.HEMS_PORT_OPENCLAW_BRIDGE, 10)
+      // PORT env var controls the internal container listen port
+      port: process.env.PORT
+        ? parseInt(process.env.PORT, 10)
         : undefined,
     },
   };
