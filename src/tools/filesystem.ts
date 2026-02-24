@@ -5,18 +5,46 @@ import {
   statSync,
   existsSync,
   mkdirSync,
+  realpathSync,
 } from "fs";
 import { join, resolve, dirname } from "path";
 import type { Tool, ToolResult } from "./registry.ts";
+import { homedir } from "os";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+
+// Allowed base directories for read_file and write_file.
+// Paths outside these directories are rejected.
+// Default: cwd and ~/.localcraw; can be extended via LOCALCRAW_ALLOWED_DIRS env var.
+function getAllowedDirs(): string[] {
+  const defaults = [process.cwd(), resolve(homedir(), ".localcraw")];
+  const extra = process.env.LOCALCRAW_ALLOWED_DIRS
+    ? process.env.LOCALCRAW_ALLOWED_DIRS.split(":").map((d) => resolve(d))
+    : [];
+  return [...defaults, ...extra];
+}
+
+function isPathAllowed(absPath: string): boolean {
+  const allowed = getAllowedDirs();
+  return allowed.some((dir) => absPath === dir || absPath.startsWith(dir + "/"));
+}
 
 function safeRead(filePath: string): ToolResult {
   const abs = resolve(filePath);
   if (!existsSync(abs)) {
     return { success: false, output: "", error: `File not found: ${abs}` };
   }
-  const stat = statSync(abs);
+  // Fix-9: Resolve symlinks before checking allowed dirs to prevent traversal
+  let real: string;
+  try {
+    real = realpathSync(abs);
+  } catch {
+    return { success: false, output: "", error: `Cannot resolve path: ${abs}` };
+  }
+  if (!isPathAllowed(real)) {
+    return { success: false, output: "", error: `Access denied: ${real} is outside allowed directories` };
+  }
+  const stat = statSync(real);
   if (stat.size > MAX_FILE_SIZE) {
     return {
       success: false,
@@ -25,7 +53,7 @@ function safeRead(filePath: string): ToolResult {
     };
   }
   try {
-    const content = readFileSync(abs, "utf-8");
+    const content = readFileSync(real, "utf-8");
     return { success: true, output: content };
   } catch (err) {
     return { success: false, output: "", error: String(err) };
@@ -66,6 +94,10 @@ export const writeFileTool: Tool = {
     if (!path) return { success: false, output: "", error: "path is required" };
     try {
       const abs = resolve(path);
+      // Fix-4: Check allowed dirs before writing (use abs, not real, since file may not exist yet)
+      if (!isPathAllowed(abs)) {
+        return { success: false, output: "", error: `Access denied: ${abs} is outside allowed directories` };
+      }
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, content, "utf-8");
       return { success: true, output: `Written ${content.length} chars to ${abs}` };
@@ -129,6 +161,15 @@ export const searchFilesTool: Tool = {
     const basePath = resolve((args.path as string) || ".");
     const pattern = args.pattern as string | undefined;
     const contains = args.contains as string | undefined;
+
+    // Fix-8: Validate search root against allowed directories
+    if (!isPathAllowed(basePath)) {
+      return { success: false, output: "", error: `Access denied: ${basePath} is outside allowed directories` };
+    }
+    // Fix-8: Limit pattern length to prevent ReDoS via crafted glob input
+    if (pattern && pattern.length > 256) {
+      return { success: false, output: "", error: "pattern too long (max 256 chars)" };
+    }
 
     const results: string[] = [];
 

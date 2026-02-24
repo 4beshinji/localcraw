@@ -18,7 +18,12 @@ export class Session {
   private _messages: Message[] = [];
 
   constructor(id?: string) {
-    this.id = id ?? randomUUID();
+    // Fix-M4: Validate session ID to prevent path traversal
+    const rawId = id ?? randomUUID();
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(rawId)) {
+      throw new Error(`Invalid session ID: must be alphanumeric/dash/underscore, max 128 chars`);
+    }
+    this.id = rawId;
     this.filePath = join(getSessionsDir(), `${this.id}.jsonl`);
 
     if (id && existsSync(this.filePath)) {
