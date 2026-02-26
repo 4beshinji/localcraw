@@ -14,8 +14,8 @@
 | PC メトリクス取得 | OpenClaw WebSocket RPC 経由 | systeminformation ライブラリで直接取得 |
 | シェルコマンド実行 | OpenClaw Gateway 経由 | 直接実行 (sanitizer 付き) |
 | デスクトップ通知 | OpenClaw Gateway 経由 | notify-send / osascript で直接送信 |
-| ブラウザ制御 | OpenClaw Gateway 経由 | **未実装 (501)** ← 制限あり |
-| ブラウザチェッカー | HEMS_BROWSER_CHECKERS で設定可 | **未実装** ← 制限あり |
+| ブラウザ制御 | OpenClaw Gateway 経由 | Playwright (Chromium) で実装済み |
+| ブラウザチェッカー | HEMS_BROWSER_CHECKERS で設定可 | Playwright (Chromium) で実装済み |
 | Gmail チェッカー | ✅ | ✅ |
 | GitHub チェッカー | ✅ | ✅ |
 | 内部ポート | 8000 | 8000 (同じ) |
@@ -174,7 +174,7 @@ OPENCLAW_BRIDGE_URL=http://localcraw-bridge:8000   # openclaw-bridge → localcr
 # 2. 不要な行を削除またはコメントアウト
 # OPENCLAW_GATEWAY_URL=...   ← 削除可
 # OPENCLAW_GATEWAY_TOKEN=... ← 削除可
-# HEMS_BROWSER_CHECKERS=...  ← 削除可 (未実装)
+# HEMS_BROWSER_CHECKERS=...  ← Playwright で動作するため必要に応じて設定
 ```
 
 ### ステップ 2: 旧ブリッジの停止

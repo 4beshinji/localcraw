@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Minimal OpenClaw implementation for local LLMs",
   "type": "module",
+  "license": "MIT",
   "bin": {
     "localcraw": "./src/cli.ts"
   },
