@@ -163,6 +163,51 @@ hemsCmd
     console.log(JSON.stringify(snapshot, null, 2));
   });
 
+// ── bot command ──────────────────────────────────────────────────────────────
+const botCmd = program.command("bot").description("Run chat bot adapters");
+
+botCmd
+  .command("discord")
+  .description("Start Discord bot")
+  .option("--hems", "Load HEMS tools")
+  .action(async (opts: { hems?: boolean }) => {
+    // Overlay env vars onto config for Discord
+    overlayBotEnv();
+    const { startDiscordBot } = await import("./bots/discord.ts");
+    await startDiscordBot({ hems: opts.hems });
+  });
+
+botCmd
+  .command("slack")
+  .description("Start Slack bot")
+  .option("--hems", "Load HEMS tools")
+  .action(async (opts: { hems?: boolean }) => {
+    overlayBotEnv();
+    const { startSlackBot } = await import("./bots/slack.ts");
+    await startSlackBot({ hems: opts.hems });
+  });
+
+/** Push well-known env vars into config env so loadConfig picks them up */
+function overlayBotEnv(): void {
+  // Discord
+  if (process.env.DISCORD_TOKEN) {
+    process.env.LOCALCRAW_DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+  }
+  if (process.env.DISCORD_CLIENT_ID) {
+    process.env.LOCALCRAW_DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+  }
+  // Slack
+  if (process.env.SLACK_BOT_TOKEN) {
+    process.env.LOCALCRAW_SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+  }
+  if (process.env.SLACK_APP_TOKEN) {
+    process.env.LOCALCRAW_SLACK_APP_TOKEN = process.env.SLACK_APP_TOKEN;
+  }
+  if (process.env.SLACK_SIGNING_SECRET) {
+    process.env.LOCALCRAW_SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
+  }
+}
+
 // ── config command ────────────────────────────────────────────────────────────
 program
   .command("config")

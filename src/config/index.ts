@@ -40,12 +40,29 @@ const ContextSchema = z.object({
   keepRecentTurns: z.number().int().positive().default(4),
 });
 
+const DiscordSchema = z.object({
+  token: z.string(),
+  clientId: z.string(),
+  slashCommand: z.boolean().default(true),
+  mentionReply: z.boolean().default(true),
+  allowedGuilds: z.array(z.string()).default([]),
+});
+
+const SlackSchema = z.object({
+  botToken: z.string(),
+  appToken: z.string(),
+  signingSecret: z.string(),
+  respondInThreads: z.boolean().default(true),
+});
+
 export const ConfigSchema = z.object({
   provider: ProviderSchema.default({}),
   toolCalling: ToolCallingSchema.default({}),
   docker: DockerSchema.default({}),
   memory: MemorySchema.default({}),
   context: ContextSchema.default({}),
+  discord: DiscordSchema.optional(),
+  slack: SlackSchema.optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -68,16 +85,47 @@ function defaultConfig(): Config {
   return ConfigSchema.parse({});
 }
 
+/** Build partial discord/slack objects from env vars, returning undefined if no relevant vars are set */
+function overlayBotEnvVars(parsed: Record<string, unknown>): void {
+  const dToken = process.env.LOCALCRAW_DISCORD_TOKEN ?? process.env.DISCORD_TOKEN;
+  const dClientId = process.env.LOCALCRAW_DISCORD_CLIENT_ID ?? process.env.DISCORD_CLIENT_ID;
+  if (dToken && dClientId) {
+    parsed.discord = {
+      ...(typeof parsed.discord === "object" && parsed.discord != null ? parsed.discord : {}),
+      token: dToken,
+      clientId: dClientId,
+    };
+  }
+
+  const sBot = process.env.LOCALCRAW_SLACK_BOT_TOKEN ?? process.env.SLACK_BOT_TOKEN;
+  const sApp = process.env.LOCALCRAW_SLACK_APP_TOKEN ?? process.env.SLACK_APP_TOKEN;
+  const sSec = process.env.LOCALCRAW_SLACK_SIGNING_SECRET ?? process.env.SLACK_SIGNING_SECRET;
+  if (sBot && sApp && sSec) {
+    parsed.slack = {
+      ...(typeof parsed.slack === "object" && parsed.slack != null ? parsed.slack : {}),
+      botToken: sBot,
+      appToken: sApp,
+      signingSecret: sSec,
+    };
+  }
+}
+
 export function loadConfig(): Config {
   ensureConfigDir();
   if (!existsSync(CONFIG_PATH)) {
-    const cfg = defaultConfig();
-    writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+    const base: Record<string, unknown> = {};
+    overlayBotEnvVars(base);
+    const cfg = ConfigSchema.parse(base);
+    // Only write defaults (without bot secrets) to disk
+    const { discord: _d, slack: _s, ...rest } = cfg;
+    writeFileSync(CONFIG_PATH, JSON.stringify(rest, null, 2));
+    cfg.memory.dbPath = expandHome(cfg.memory.dbPath);
     return cfg;
   }
   try {
     const raw = readFileSync(CONFIG_PATH, "utf-8");
     const parsed = JSON5.parse(raw);
+    overlayBotEnvVars(parsed);
     const cfg = ConfigSchema.parse(parsed);
     cfg.memory.dbPath = expandHome(cfg.memory.dbPath);
     return cfg;
