@@ -214,6 +214,7 @@ export async function startSlackBot(opts: { hems?: boolean }): Promise<void> {
 
   // ── app_mention: @bot in channels ───────────────────────────────────────────
   app.event("app_mention", async ({ event }) => {
+    if (!event.user) return;
     await handleMessage(
       ctx,
       cache,

@@ -222,11 +222,13 @@ export async function startDiscordBot(opts: { hems?: boolean }): Promise<void> {
         message.channel.isThread() ? message.channelId : undefined
       );
 
-      // Show typing indicator
+      // Show typing indicator (not available on PartialGroupDMChannel)
+      const ch = message.channel;
+      const canType = "sendTyping" in ch && typeof ch.sendTyping === "function";
       const typingInterval = setInterval(() => {
-        message.channel.sendTyping().catch(() => {});
+        if (canType) (ch as { sendTyping: () => Promise<void> }).sendTyping().catch(() => {});
       }, 5000);
-      message.channel.sendTyping().catch(() => {});
+      if (canType) (ch as { sendTyping: () => Promise<void> }).sendTyping().catch(() => {});
 
       await withLock(sessionId, async () => {
         const runner = getOrCreateRunner(cache, ctx, sessionId);
@@ -259,7 +261,9 @@ export async function startDiscordBot(opts: { hems?: boolean }): Promise<void> {
         try {
           await message.reply(chunks[0]);
           for (let i = 1; i < chunks.length; i++) {
-            await message.channel.send(chunks[i]);
+            if ("send" in message.channel && typeof message.channel.send === "function") {
+              await (message.channel as { send: (c: string) => Promise<unknown> }).send(chunks[i]);
+            }
           }
         } catch (err) {
           console.error("[discord] Failed to send mention reply:", err);
