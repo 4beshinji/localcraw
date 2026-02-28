@@ -11,6 +11,8 @@ npx tsx src/cli.ts chat -m "message"       # one-shot
 npx tsx src/cli.ts chat --hems             # chat with HEMS tools enabled
 npx tsx src/cli.ts hems serve              # start openclaw-bridge replacement server
 npx tsx src/cli.ts hems status             # show PC metrics snapshot
+npx tsx src/cli.ts bot discord [--hems]    # start Discord bot
+npx tsx src/cli.ts bot slack [--hems]      # start Slack bot
 npx tsx src/cli.ts config                  # show config
 npx tsx src/cli.ts memory search <query>   # search memories
 
@@ -27,7 +29,7 @@ docker compose -f docker-compose.hems.yml up
 
 **Runtime**: Node 23 + `tsx` (no compilation step). All local imports use `.ts` extensions. `allowImportingTsExtensions: true` + `noEmit: true` in tsconfig.
 
-**Config**: `~/.localcraw/config.json` (JSON5). Validated via Zod in `src/config/index.ts`. HEMS extends base config with `loadHemsConfig()` in `src/hems/config.ts`, which overlays env vars on top.
+**Config**: `~/.localcraw/config.json` (JSON5). Validated via Zod in `src/config/index.ts`. HEMS extends base config with `loadHemsConfig()` in `src/hems/config.ts`, which overlays env vars on top. Discord/Slack config sections are optional and populated from env vars (`DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`).
 
 ### Core agent flow
 
@@ -58,6 +60,16 @@ HEMS-specific tools in `src/tools/hems/`: `pc` (metrics snapshot, process list),
 ### Skills
 
 `src/skills/loader.ts` — Loads `skills/SKILL.md` or `~/.localcraw/skills/SKILL.md`. Parses H2 sections as individual skills. Injects relevant skills into system prompt based on keyword matching.
+
+### Bot adapters (`src/bots/`)
+
+- `setup.ts` — Shared bootstrap. `createBotContext()` builds `{ config, client, memory, registry }` once per process; `createRunner()` creates a per-conversation `AgentRunner`. Reused by CLI, Discord, and Slack.
+- `discord.ts` — discord.js v14. Slash command (`/chat message:...`) + mention reply. LRU runner cache (max 100), per-session concurrency lock, 2000-char message splitting, batched `editReply` updates.
+- `slack.ts` — @slack/bolt v3 Socket Mode. `app_mention` + DM (`message.im`). "Thinking..." placeholder updated via `chat.update`, thread-based replies, 4000-char message splitting.
+
+Session IDs: `discord-{channelOrThreadId}-{userId}`, `slack-{threadTsOrChannelId}-{userId}`. All sessions persist to the same `~/.localcraw/sessions/` JSONL files.
+
+Bot commands use dynamic `import()` so unused platform dependencies are never loaded.
 
 ### HEMS variant (`src/hems/`)
 
