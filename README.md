@@ -47,6 +47,23 @@ npx tsx src/cli.ts config
 npx tsx src/cli.ts memory search <query>
 ```
 
+### チャットBot (Discord / Slack)
+
+```bash
+# Discord Bot 起動
+DISCORD_TOKEN=xxx DISCORD_CLIENT_ID=xxx npx tsx src/cli.ts bot discord
+
+# Slack Bot 起動 (Socket Mode)
+SLACK_BOT_TOKEN=xoxb-xxx SLACK_APP_TOKEN=xapp-xxx SLACK_SIGNING_SECRET=xxx npx tsx src/cli.ts bot slack
+
+# HEMS ツール付きで起動
+npx tsx src/cli.ts bot discord --hems
+npx tsx src/cli.ts bot slack --hems
+```
+
+- **Discord**: スラッシュコマンド (`/chat message:...`) + メンション返信
+- **Slack**: チャンネルでの `@bot` メンション + DM、スレッド内で会話継続
+
 ### HEMS バリアント
 
 ```bash
@@ -93,6 +110,22 @@ JSON5 形式。未指定のフィールドにはデフォルト値が適用さ�
 | `context` | `maxTokens` | `6000` | コンテキスト最大トークン |
 | | `compressionThreshold` | `0.75` | 圧縮開始閾値 (0–1) |
 
+### Discord / Slack 設定（オプション）
+
+`config.json` に記述するか、環境変数で指定できます。
+
+| 環境変数 | config.json キー | 説明 |
+|---|---|---|
+| `DISCORD_TOKEN` | `discord.token` | Discord Bot トークン |
+| `DISCORD_CLIENT_ID` | `discord.clientId` | Discord アプリケーション ID |
+| — | `discord.slashCommand` | `/chat` コマンド有効化 (default: `true`) |
+| — | `discord.mentionReply` | メンション返信有効化 (default: `true`) |
+| — | `discord.allowedGuilds` | 許可サーバー ID 配列 (空=全許可) |
+| `SLACK_BOT_TOKEN` | `slack.botToken` | Slack Bot トークン (`xoxb-...`) |
+| `SLACK_APP_TOKEN` | `slack.appToken` | Slack App トークン (`xapp-...`) |
+| `SLACK_SIGNING_SECRET` | `slack.signingSecret` | Slack Signing Secret |
+| — | `slack.respondInThreads` | スレッド内返信 (default: `true`) |
+
 ### HEMS 環境変数
 
 | 変数 | デフォルト | 説明 |
@@ -121,6 +154,10 @@ src/
 │   ├── runner.ts         # エージェントループ (最大10イテレーション)
 │   ├── context.ts        # システムプロンプト組み立て・コンテキスト圧縮
 │   └── session.ts        # JSONL セッションログ
+├── bots/
+│   ├── setup.ts          # 共通ブートストラップ (BotContext, createRunner)
+│   ├── discord.ts        # Discord Bot (discord.js v14)
+│   └── slack.ts          # Slack Bot (@slack/bolt, Socket Mode)
 ├── llm/
 │   ├── client.ts         # OpenAI 互換クライアント (ストリーミング)
 │   ├── toolcall.ts       # ReAct XML フォールバック

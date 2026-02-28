@@ -333,8 +333,9 @@ Docker コンテナからの GPU アクセスには NVIDIA Container Toolkit が
     restart: always
     profiles: ["localcraw"]
     pid: "host"
+    # 注: /proc:ro マウントは pid:host と併用しない (AppArmor が healthcheck exec をブロックする)
+    # pid:host だけでホストの /proc が自動的に見える
     volumes:
-      - /proc:/proc:ro
       - /sys:/sys:ro
     ports:
       - "${HEMS_PORT_OPENCLAW_BRIDGE:-8013}:8000"

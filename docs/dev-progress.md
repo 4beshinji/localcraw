@@ -1,52 +1,40 @@
 # 開発進捗メモ
 
-最終更新: 2026-02-24
+最終更新: 2026-02-28
 
 ## 現在の状態
 
 **ブランチ**: `hems`
 **Docker イメージ**: `localcraw-hems:dev` (ビルド済み、動作確認済み)
-**次のアクション**: 全動作確認完了。本番投入検討フェーズへ。
+**次のアクション**: Discord/Slack Bot 実環境テスト
 
 ---
 
 ## 完了済み作業
 
-### git 構成
-```
-main   汎用 localcraw (変更不要)
-hems   HEMS 特化バリアント (開発中)
-```
+### Phase 1: コア実装
 
-### コミット履歴 (hems ブランチ)
-```
-12eb50f fix(hems): resolve all openclaw-bridge compatibility gaps
-077eaf3 docs(hems): add migration guide from openclaw-bridge
-368e3cc feat(hems): add Dockerfile and docker-compose override
-f967ce3 feat(hems): HEMS-specialized variant
-099d93b chore: add .gitignore, exclude node_modules
-f175683 feat: initial localcraw implementation
-```
+- CLI チャット (インタラクティブ / ワンショット)
+- AgentRunner (ネイティブ tool calling + ReAct フォールバック)
+- MemoryStore (SQLite BM25 + 埋め込みコサイン類似度)
+- Docker サンドボックス (シェルツール)
+- スキルローダー (Markdown → システムプロンプト注入)
 
-### 実装済みファイル (hems ブランチ追加分)
+### Phase 2: HEMS バリアント
 
-| ファイル | 内容 |
-|---|---|
-| `src/hems/config.ts` | HEMS 設定 + Docker 環境変数読み込み + `HEMS_BROWSER_CHECKERS` パース |
-| `src/hems/metrics.ts` | systeminformation による PC メトリクス (`freq_mhz`, `temp_c` 含む) |
-| `src/hems/mqtt.ts` | MQTT publisher (閾値イベント含む) |
-| `src/hems/server.ts` | openclaw-bridge 互換 HTTP API (Playwright ブラウザエンドポイント実装済み) |
-| `src/hems/service.ts` | サービスオーケストレータ |
-| `src/hems/services.ts` | Gmail / GitHub / ブラウザチェッカー |
-| `src/hems/browser.ts` | Playwright/Chromium ブラウザマネージャー |
-| `src/tools/hems/pc.ts` | `get_pc_status` / `get_pc_processes` エージェントツール |
-| `src/tools/hems/mqtt.ts` | `mqtt_publish` / `mqtt_subscribe` エージェントツール |
-| `src/tools/hems/ha.ts` | Home Assistant エージェントツール |
-| `Dockerfile` | node:23-slim + Playwright Chromium |
-| `docker-compose.hems.yml` | HEMS スタック compose override |
-| `docs/migration-from-openclaw-bridge.md` | openclaw-bridge → localcraw-hems 移行ガイド |
-| `AGENTS.md` | HEMS 特化システムプロンプト (日本語) |
-| `skills/SKILL.md` | HEMS 特化スキル定義 |
+- PC メトリクス (`systeminformation`) + MQTT パブリッシュ
+- openclaw-bridge 互換 HTTP API
+- サービスチェッカー (Gmail IMAP, GitHub Octokit, Playwright ブラウザ)
+- Home Assistant REST API ツール
+- Docker 構成 (`Dockerfile`, `docker-compose.hems.yml`)
+
+### Phase 3: チャットBot アダプタ
+
+- `src/bots/setup.ts` — 共通ブートストラップ (`BotContext`, `createRunner`)
+- `src/bots/discord.ts` — Discord Bot (slash command + mention reply)
+- `src/bots/slack.ts` — Slack Bot (Socket Mode, app_mention + DM)
+- `src/config/index.ts` — discord/slack スキーマ追加 + 環境変数オーバーレイ
+- `src/cli.ts` — `bot discord` / `bot slack` サブコマンド (動的 import)
 
 ---
 
@@ -55,48 +43,16 @@ f175683 feat: initial localcraw implementation
 | 確認項目 | 状態 | 備考 |
 |---|---|---|
 | `npx tsc --noEmit` | ✅ 通過 | 型エラーなし |
-| `docker build` | ✅ 成功 | 104.8秒, Playwright Chromium 込み |
-| CLI ヘルプ表示 | ✅ 確認済み | `hems` サブコマンド含む |
+| `docker build` | ✅ 成功 | Playwright Chromium 込み |
+| CLI チャット | ✅ 確認済み | インタラクティブ / ワンショット |
 | PC メトリクス取得 (`hems status`) | ✅ 確認済み | `--pid=host` で CPU/メモリ/温度/プロセス取得 |
-| HTTP API ヘルスチェック | ✅ 確認済み | `/health`, `/api/pc/status` 正常応答 |
-| MQTT 接続 | ✅ 確認済み | hems/# トピックに CPU/メモリ/ディスクを定期パブリッシュ |
+| HTTP API (`/health`, `/api/pc/status`) | ✅ 確認済み | 正常応答 |
+| MQTT 接続 | ✅ 確認済み | `hems/#` トピックに定期パブリッシュ |
+| Discord Bot | ⬜ 未テスト | 型チェック通過済み |
+| Slack Bot | ⬜ 未テスト | 型チェック通過済み |
 
 ---
 
-## 再起動後に実施する確認コマンド
+## openclaw-bridge との互換性
 
-```bash
-# 1. CLI ヘルプ
-docker run --rm localcraw-hems:dev node_modules/.bin/tsx src/cli.ts --help
-
-# 2. hems サブコマンド
-docker run --rm localcraw-hems:dev node_modules/.bin/tsx src/cli.ts hems --help
-
-# 3. PC メトリクス取得
-docker run --rm --pid=host \
-  -v /proc:/proc:ro -v /sys:/sys:ro \
-  localcraw-hems:dev \
-  node_modules/.bin/tsx src/cli.ts hems status
-
-# 4. HTTP API サーバー + ヘルスチェック
-docker run --rm -d --name hems-test -p 18013:8000 \
-  --pid=host -v /proc:/proc:ro -v /sys:/sys:ro \
-  localcraw-hems:dev
-sleep 5
-curl -s http://localhost:18013/health | python3 -m json.tool
-curl -s http://localhost:18013/api/pc/status | python3 -m json.tool
-docker stop hems-test
-```
-
----
-
-## openclaw-bridge との互換性 (最終状態)
-
-全項目が互換済み:
-
-| 非互換項目 | 修正内容 |
-|---|---|
-| `cpu.freq_mhz = 0` | `si.cpuCurrentSpeed()` 追加、MQTT ペイロードに含める |
-| `cpu.temp_c` が温度トピックのみ | `getCpuMetrics()` に直接含める |
-| `control_browser` → 501 | Playwright で実装 |
-| `HEMS_BROWSER_CHECKERS` 未対応 | `HemsBrowser.runChecker()` で実装 |
+全項目が互換済み。詳細は [migration-from-openclaw-bridge.md](./migration-from-openclaw-bridge.md) を参照。
