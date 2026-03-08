@@ -5,14 +5,29 @@ import {
   statSync,
   existsSync,
   mkdirSync,
+  lstatSync,
 } from "fs";
 import { join, resolve, dirname } from "path";
 import type { Tool, ToolResult } from "./registry.ts";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 
+/** Validate resolved path stays within the workspace (cwd) */
+function validatePath(absPath: string): string | null {
+  const cwd = process.cwd();
+  const realPath = resolve(absPath);
+  if (!realPath.startsWith(cwd + "/") && realPath !== cwd) {
+    return `Access denied: path escapes workspace directory`;
+  }
+  return null;
+}
+
 function safeRead(filePath: string): ToolResult {
   const abs = resolve(filePath);
+  const pathErr = validatePath(abs);
+  if (pathErr) {
+    return { success: false, output: "", error: pathErr };
+  }
   if (!existsSync(abs)) {
     return { success: false, output: "", error: `File not found: ${abs}` };
   }
@@ -66,6 +81,10 @@ export const writeFileTool: Tool = {
     if (!path) return { success: false, output: "", error: "path is required" };
     try {
       const abs = resolve(path);
+      const pathErr = validatePath(abs);
+      if (pathErr) {
+        return { success: false, output: "", error: pathErr };
+      }
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, content, "utf-8");
       return { success: true, output: `Written ${content.length} chars to ${abs}` };
@@ -91,13 +110,17 @@ export const listDirTool: Tool = {
     const path = (args.path as string) || ".";
     try {
       const abs = resolve(path);
+      const pathErr = validatePath(abs);
+      if (pathErr) {
+        return { success: false, output: "", error: pathErr };
+      }
       if (!existsSync(abs)) {
         return { success: false, output: "", error: `Directory not found: ${abs}` };
       }
       const entries = readdirSync(abs, { withFileTypes: true });
       const lines = entries.map((e) => {
         const indicator = e.isDirectory() ? "/" : e.isSymbolicLink() ? "@" : "";
-        const stat = statSync(join(abs, e.name));
+        const stat = lstatSync(join(abs, e.name));
         const size = e.isFile() ? ` (${stat.size}B)` : "";
         return `${e.name}${indicator}${size}`;
       });
@@ -127,6 +150,10 @@ export const searchFilesTool: Tool = {
   },
   async execute(args) {
     const basePath = resolve((args.path as string) || ".");
+    const basePathErr = validatePath(basePath);
+    if (basePathErr) {
+      return { success: false, output: "", error: basePathErr };
+    }
     const pattern = args.pattern as string | undefined;
     const contains = args.contains as string | undefined;
 

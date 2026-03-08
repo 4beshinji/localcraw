@@ -6,6 +6,21 @@ import type { Config } from "../config/index.ts";
 
 const execFileAsync = promisify(execFile);
 
+// Dangerous commands that should be blocked in direct (non-Docker) execution
+const BLOCKED_PATTERNS = [
+  /\brm\s+(-[a-zA-Z]*)?.*\s+\//,  // rm with absolute paths
+  /\bmkfs\b/,
+  /\bdd\b.*\bof=/,
+  />\s*\/dev\//,
+  /\bchmod\s+[0-7]*777\b/,
+  /\bcurl\b.*\|\s*(ba)?sh/,        // curl pipe to shell
+  /\bwget\b.*\|\s*(ba)?sh/,
+];
+
+function isBlockedCommand(command: string): boolean {
+  return BLOCKED_PATTERNS.some((rx) => rx.test(command));
+}
+
 export function createShellTool(config: Config, workspaceDir?: string): Tool {
   const workspace = workspaceDir ?? process.cwd();
 
@@ -32,6 +47,14 @@ export function createShellTool(config: Config, workspaceDir?: string): Tool {
       if (config.docker.enabled) {
         return runInDocker(command, workspace, config);
       } else {
+        // Block dangerous commands when running without Docker sandbox
+        if (isBlockedCommand(command)) {
+          return {
+            success: false,
+            output: "",
+            error: "Command blocked: potentially destructive operation not allowed without Docker sandbox",
+          };
+        }
         return runDirect(command, workspace, config);
       }
     },
@@ -55,6 +78,10 @@ async function runInDocker(
     config.docker.memoryLimit,
     "--cpus",
     config.docker.cpuLimit,
+    "--read-only",
+    "--no-new-privileges",
+    "--cap-drop=ALL",
+    "--tmpfs", "/tmp:rw,noexec,size=64m",
     "-v",
     `${absWorkspace}:/workspace`,
     "-w",
@@ -74,8 +101,15 @@ async function runInDocker(
     return { success: true, output: output || "(no output)" };
   } catch (err: unknown) {
     if (err && typeof err === "object" && "code" in err && (err as { code: unknown }).code === "ENOENT") {
-      // Docker not available, fall back to direct execution
-      console.warn("[shell] Docker not found, falling back to direct execution");
+      // Docker not available - warn and block dangerous commands before fallback
+      console.warn("[shell] WARNING: Docker not found, falling back to unsandboxed direct execution");
+      if (isBlockedCommand(command)) {
+        return {
+          success: false,
+          output: "",
+          error: "Command blocked: Docker unavailable and command is potentially destructive",
+        };
+      }
       return runDirect(command, workspace, config);
     }
     const e = err as { stdout?: string; stderr?: string; message?: string };

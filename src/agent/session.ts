@@ -19,6 +19,12 @@ export class Session {
 
   constructor(id?: string) {
     this.id = id ?? randomUUID();
+
+    // Validate session ID to prevent path traversal
+    if (!/^[a-zA-Z0-9_-]+$/.test(this.id)) {
+      throw new Error("Invalid session ID: must contain only alphanumeric characters, hyphens, and underscores");
+    }
+
     this.filePath = join(getSessionsDir(), `${this.id}.jsonl`);
 
     if (id && existsSync(this.filePath)) {

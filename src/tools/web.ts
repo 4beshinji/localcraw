@@ -37,7 +37,18 @@ export const webFetchTool: Tool = {
     if (!url) return { success: false, output: "", error: "url is required" };
 
     try {
-      new URL(url); // validate URL
+      const parsed = new URL(url);
+
+      // SSRF protection: block internal/private network access
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { success: false, output: "", error: `Blocked protocol: ${parsed.protocol} (only http/https allowed)` };
+      }
+
+      const hostname = parsed.hostname.toLowerCase();
+      const blockedHosts = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "metadata.google.internal", "169.254.169.254"];
+      if (blockedHosts.includes(hostname) || hostname.endsWith(".local") || hostname.startsWith("10.") || hostname.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
+        return { success: false, output: "", error: "Blocked: access to internal/private network addresses is not allowed" };
+      }
     } catch {
       return { success: false, output: "", error: `Invalid URL: ${url}` };
     }

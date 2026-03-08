@@ -129,8 +129,8 @@ export class AgentRunner {
 
         const result = await this.tools.execute(call.name, call.arguments);
         const resultText = result.success
-          ? result.output
-          : `Error: ${result.error ?? "unknown error"}`;
+          ? result.output.slice(0, 50000) // Cap tool output size
+          : `Error: ${(result.error ?? "unknown error").replace(/\/home\/[^\s:]+/g, "<path>")}`;
 
         opts.onToolResult?.(call.name, resultText, result.success);
         this.session.logToolResult(call.name, resultText, result.success);
