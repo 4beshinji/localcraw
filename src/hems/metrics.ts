@@ -69,10 +69,15 @@ export async function getCpuMetrics(): Promise<CpuMetrics> {
 export async function getMemoryMetrics(): Promise<MemoryMetrics> {
   const mem = await si.mem();
   const toGb = (b: number) => Math.round((b / 1024 ** 3) * 100) / 100;
+  // Linux: si.mem().used = total - free, which counts buffer/cache as "used"
+  // and reads ~90% on any healthy system. Use (total - available) to match
+  // `free -h` available column / htop — memory not reclaimable on demand.
+  const available = mem.available ?? mem.free;
+  const realUsed = Math.max(0, mem.total - available);
   return {
-    used_gb: toGb(mem.used),
+    used_gb: toGb(realUsed),
     total_gb: toGb(mem.total),
-    percent: Math.round((mem.used / mem.total) * 100),
+    percent: mem.total ? Math.round((realUsed / mem.total) * 100) : 0,
   };
 }
 
